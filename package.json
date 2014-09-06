@@ -1,24 +1,25 @@
 {
   "name": "mcserve",
-  "version": "0.5.0",
-  "description": "serve minecraft with a simple chat logging web interface",
+  "version": "0.6.0",
+  "description": "serve minecraft with a simple REST interface",
   "repository": {
     "type": "git",
-    "url": "git://github.com/superjoe30/mcserve.git"
+    "url": "git://github.com/kai5263499/mcserve.git"
   },
   "keywords": [
     "minecraft",
     "server"
   ],
-  "author": "Andrew Kelley",
+  "author": "Wes Widner <wes@werxltd.com>",
   "license": "BSD",
   "dependencies": {
     "superagent": "~0.14.1",
     "minecraft-protocol": "~0.9.0",
-    "express": "~3.1.1",
-    "connect-sse": "~1.0.5",
-    "connect-xcors": "~0.5.2",
-    "connect-nocache": "~1.0.1",
-    "moment": "~2.0.0"
+    "express": "~3.3.5",
+    "moment": "~2.0.0",
+    "socket.io": "0.9.16",
+    "lodash": "2.4.1",
+    "commander":"2.3.0",
+    "body-parser":"1.8.0"
   }
 }
