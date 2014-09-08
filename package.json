@@ -1,5 +1,5 @@
 {
-  "name": "mcserve",
+  "name": "minecraft-rest",
   "version": "0.6.0",
   "description": "serve minecraft with a simple REST interface",
   "repository": {
@@ -8,7 +8,8 @@
   },
   "keywords": [
     "minecraft",
-    "server"
+    "server",
+    "rest"
   ],
   "author": "Wes Widner <wes@werxltd.com>",
   "license": "BSD",

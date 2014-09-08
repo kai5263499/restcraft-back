@@ -1,24 +1,7 @@
 {
-  "disableProxy": false,
+  "server_directory":"/Users/wes/Downloads/testworld",
+  "server_jar":"minecraft_server.1.8.jar",
   "memory":1024,
-  "proxyPort": 25565,
-  "proxyHost": "0.0.0.0",
-  "proxyRemoteHost": "localhost",
   "webPort": 9999,
-  "webHost": "0.0.0.0",
-  "minecraftPort": 25566,
-  "minecraftHost": "127.0.0.1",
-  "online-mode": false,
-  "encryption": true,
-  "kickTimeout": null,
-  "motd": "A Minecraft Server",
-  "max-players": 20,
-  "admins": {
-    "superjoe": true
-  },
-  "onlineModeExceptions": {
-    "notch": true
-  },
-  "botServerEndpoint": "http://localhost:11476",
-  "botServerApiKey": "43959b30-6cd8-11e2-bcfd-0800200c9a66"
+  "webHost": "0.0.0.0"
 }
