@@ -1,42 +1,34 @@
 #!/usr/bin/env node
 
-var childProcess = require('child_process')
-  , readline = require('readline')
-  , path = require('path')
-  , http = require('http')
-  , packageJson = require('./package.json')
-  , SETTINGS_PATH = path.join(process.cwd(), 'mcserve.json')
-  , settings = require(SETTINGS_PATH)
-  , assert = require('assert')
-  , express = require('express')
-  , bodyParser = require('body-parser')
-  , fs = require('fs')
-  , program = require('commander')
-  , EventEmitter = require('events').EventEmitter
+var childProcess = require('child_process');
+var readline = require('readline');
+var path = require('path');
+var http = require('http');
+var packageJson = require('./package.json');
+var SETTINGS_PATH = path.join(process.cwd(), 'mcserve.json');
+var settings = require(SETTINGS_PATH);
+var assert = require('assert');
+var express = require('express');
+var router = express.Router();
+var bodyParser = require('body-parser');
+var util = require('util');
+var usage = require('usage');
+var WebSocketServer = require('ws').Server;
+var fs = require('fs');
 
-program
-  .version(packageJson.version)
-  .option('-m, --minecraft [jarfile]','Location of minecraft server jar')
-  .parse(process.argv);
 
-var SERVER_JAR_PATH = program.minecraft;
-if(!SERVER_JAR_PATH || !fs.existsSync(SERVER_JAR_PATH)) {
-  // TODO: download the jar
-  console.log('download minecraft jar into current directory');
+if(!fs.existsSync(settings.server_directory)) {
+  console.log("server directory "+settings.server_directory+" doesn't exist, attempting to create it");
+  fs.mkdirSync(settings.server_directory);
+}
+process.chdir(settings.server_directory);
+
+if(!fs.existsSync(settings.server_jar)) {
+  console.log(+' doesn\'t exist, downloading the latest minecraft server jar');
   process.exit(-1);
 }
 
-var EVENT_HISTORY_COUNT = 100;
-
-var onliners = {};
-var eventHistory = [];
-var bus = new EventEmitter();
-bus.setMaxListeners(0);
-var mcServer = null;
-var mcProxy = null;
-var httpServer = null;
-var killTimeout = null;
-var lastSeen = {};
+var mcServer, httpServer, killTimeout, mp, mcServerStats, wss;
 
 var lineHandlers = [
   {
@@ -48,76 +40,56 @@ var lineHandlers = [
   }
 ];
 
-var emitEvent = function(type, value) {
-  var event = {
-    type: type,
-    date: new Date(),
-    value: value,
-  };
-  if (event.type !== 'userActivity') {
-    eventHistory.push(event);
-    while (eventHistory.length > EVENT_HISTORY_COUNT) {
-      eventHistory.shift();
-    }
-  }
-  bus.emit('event', event);
-}
-
 var startServer = function() {
   var app = express();
   app.use(bodyParser.text());
-  app.use(app.router);
-//  app.get('/events', [sse, cors], httpGetEvents);
+  app.use(router);
   httpServer = http.createServer(app);
   httpServer.listen(settings.webPort, settings.webHost, function() {
     console.info("Listening at http://" + settings.webHost + ":" + settings.webPort);
   });
-  
-  app.post('/cmd', function(req, res) {
-    var cmd = req.body;
-    console.log('CMD:'+ cmd);
-    mcPut(cmd);
-    res.end('Ok');  
-  });
-}
 
-var httpGetEvents = function(req, resp) {
-  resp.setMaxListeners(0);
-  function busOn(event, cb){
-    bus.on(event, cb);
-    resp.on('close', function(){
-      bus.removeListener(event, cb);
-    });
-  }
-  resp.json({
-    type: "history",
-    value: {
-      onliners: onliners,
-      lastSeen: lastSeen,
-      eventHistory: eventHistory,
-      version: packageJson.version,
-    },
+  wss = new WebSocketServer({path:'/ws',server: httpServer});
+  
+  wss.broadcast = function(data) {
+    for(var i in this.clients) {
+      this.clients[i].send(data);
+    }
+  };
+
+  wss.on('connection', function(ws) {
+      ws.on('message', function(message) {
+          console.log('received: %s', message);
+      });
+      ws.send('something');
   });
-  busOn("event", function(event){
-    resp.json({
-      type: "event",
-      value: event,
+
+  // Pass a command through to the underlying minecraft server
+  router.post('/cmd', function(req, res) {
+    mcPut(req.body);
+    res.end('ok');  
+  });
+
+  router.get('/status', function(req,res) { 
+    usage.lookup(mcServer.pid, function(err, result) {
+      res.json({
+        pid:mcServer.pid,
+        cpu:result.cpu,      // in percentage
+        memory:result.memory // in bytes
+      }); 
     });
   });
-}
+};
 
 var onClose = function() {
   mcServer.removeListener('exit', restartMcServer);
-  if (mcProxy) mcProxy.removeListener('exit', restartMcProxy);
   httpServer.close();
-  if(mcProxy) rl.close();
   // if minecraft takes longer than 5 seconds to stop, kill it
   killTimeout = setTimeout(killMc, 5000);
   mcServer.once('exit', function() {
     clearTimeout(killTimeout);
   });
   mcPut("stop");
-  if (mcProxy) mcProxy.kill();
 };
 
 var startReadingInput = function() {
@@ -134,85 +106,19 @@ var startReadingInput = function() {
 
   rl.on('close', onClose);
   process.once('SIGINT', onClose);
-}
+};
 
 var restartMcServer = function() {
-  emitEvent('serverRestart');
   onliners = {};
   clearTimeout(killTimeout);
   startMcServer();
-}
-
-var restartMcProxy = function() {
-  emitEvent('proxyRestart');
-  startMcProxy();
-}
-
-var msgHandlers = {
-  requestRestart: function(username) {
-    emitEvent('requestRestart', username);
-  },
-  botCreate: function(msg) {
-    emitEvent('botCreate', msg);
-  },
-  tp: function(msg) {
-    mcPut("tp " + msg.fromUsername + " " + msg.toUsername);
-    emitEvent('tp', msg);
-  },
-  destroyBot: function(msg) {
-    mcPut("kick " + msg.botName + " destroyed bot");
-    emitEvent('destroyBot', msg);
-  },
-  autoDestroyBot: function(botName) {
-    emitEvent('autoDestroyBot', botName);
-  },
-  restart: function() {
-    mcPut("stop");
-    if (mcProxy) mcProxy.kill();
-    // if minecraft takes longer than 5 seconds to restart, kill it
-    killTimeout = setTimeout(killMc, 5000);
-  },
-  userJoin: function(username) {
-    onliners[username] = new Date();
-    emitEvent('userJoin', username);
-  },
-  userLeave: function(username) {
-    delete onliners[username];
-    emitEvent('userLeave', username);
-  },
-  userActivity: function(username) {
-    lastSeen[username] = new Date();
-    emitEvent('userActivity', username);
-  },
-  userDeath: function(username) {
-    emitEvent('userDeath', username);
-  },
-  userChat: function(msg) {
-    emitEvent('userChat', msg);
-  },
-  userChatAction: function(msg) {
-    emitEvent('userChatAction', msg);
-  },
-  doneStart: function() {
-
-  }
 };
-
-var startMcProxy = function() {
-  mcProxy = childProcess.fork(path.join(__dirname, 'lib', 'proxy.js'));
-  mcProxy.on('message', function(msg) {
-    var handler = msgHandlers[msg.type];
-    assert.ok(handler);
-    handler(msg.value);
-  });
-  mcProxy.on('exit', restartMcProxy);
-}
 
 var checkEula = function() {
   if(!fs.existsSync('eula.txt') || !fs.readFileSync('eula.txt').toString().match(/eula=true/)) {
     fs.writeFileSync('eula.txt', 'eula=true');
   }
-}
+};
 
 var MCbuffer = "";
 var onMCData = function(data) {
@@ -223,38 +129,41 @@ var onMCData = function(data) {
     onMcLine(lines[i]);
   }
   MCbuffer = lines[lines.length - 1];
-}
+};
 
 
 var startMcServer = function() {
   // TODO check java
   checkEula();
-  mcServer = childProcess.spawn('java', ['-Xmx'+settings.memory+'M', '-Xms'+settings.memory+'M', '-jar', SERVER_JAR_PATH, 'nogui'], {
+  mcServer = childProcess.spawn('java', ['-Xmx'+settings.memory+'M', '-Xms'+settings.memory+'M', '-jar', settings.server_jar, 'nogui'], {
     stdio: 'pipe',
   });
+
+  console.log("started mcServer with pid: "+mcServer.pid);
+
   mcServer.stdin.setEncoding('utf8');
   mcServer.stdout.setEncoding('utf8');
   mcServer.stdout.on('data', onMCData);
   mcServer.stderr.setEncoding('utf8');
   mcServer.stderr.on('data', onMCData);
   mcServer.on('exit', restartMcServer);
-}
+};
 
 var serverEmpty = function() {
   for (var onliner in onliners) {
     return false;
   }
   return true;
-}
+};
 
 var mcPut = function(cmd) {
   mcServer.stdin.write(cmd + "\n");
-}
+};
 
 
 var killMc = function() {
   mcServer.kill();
-}
+};
 
 var onMcLine = function(line) {
   var handler, match;
@@ -268,15 +177,15 @@ var onMcLine = function(line) {
       return;
     }
   }
+  wss.broadcast(line);
   console.info("[MC]", line);
-}
+};
 
 
 var main = function() {
   startServer();
   startReadingInput();
   startMcServer();
-  if (!settings.disableProxy) startMcProxy();
-}
+};
 
 main();
