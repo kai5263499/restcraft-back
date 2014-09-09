@@ -1,15 +1,14 @@
 /*global module:false*/
 
+var fs = require('fs');
+var childProcess = require('child_process');
+
 module.exports = function(grunt) {
 
   grunt.initConfig({
-    mocha: {
-      all: ['tests/index.html']
-    },
-
     watch: {
       files: '<%= jshint.src %>',
-      tasks: ['jshint', 'mocha']
+      tasks: ['jshint']
     },
 
     jshint: {
@@ -39,17 +38,8 @@ module.exports = function(grunt) {
 
   });
 
-  grunt.registerTask('docker', function() {
-    grunt.log.writeln('Building Dockerfile');
-
-    // docker.buildImage('archive.tar', {t: imageName}, function (err, response){
-    //   //...
-    // });
-  });
-
   grunt.loadNpmTasks('grunt-contrib-watch');
   grunt.loadNpmTasks('grunt-contrib-jshint');
   grunt.registerTask('default', 'jshint');
-  grunt.loadNpmTasks('grunt-mocha');
 
 };

@@ -1,6 +1,6 @@
-# minecraft-rest
+# restcraft-backend
 
-Console wrapper for Minecraft server.
+Console wrapper for a Minecraft server
 
 ## Features
 

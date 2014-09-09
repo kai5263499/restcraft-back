@@ -28,17 +28,50 @@ if(!fs.existsSync(settings.server_jar)) {
   process.exit(-1);
 }
 
-var mcServer, httpServer, killTimeout, mp, mcServerStats, wss;
+var mcServer, httpServer, killTimeout, mp, wss, mcServerStats;
+
+var mcServerStates = {
+  'SHUTDOWN':'shutdown',
+  'READY':'ready',
+  'STARTING':'starting'
+};
+var mcServerState = mcServerStates['SHUTDOWN'];
 
 var lineHandlers = [
   {
     re:/Done \(([^\)]+)\)!/,
     fn:function(duration) {
       console.log('server started in ['+duration+'] and is now ready for commands');
+      mcServerState = mcServerStates['READY'];
     },
     hits:0
   }
 ];
+
+var mcPut = function(cmd) {
+  mcServer.stdin.write(cmd + "\n");
+};
+
+var killMc = function() {
+  mcServer.kill();
+  mcServerState = mcServerStates['SHUTDOWN'];
+};
+
+var onMcLine = function(line) {
+  var handler, match;
+  for (var i = 0; i < lineHandlers.length; ++i) {
+    handler = lineHandlers[i];
+    match = line.match(handler.re);
+    if (match) {
+      match.shift();
+      handler.fn.apply(undefined,match);
+      handler.hit++;
+      return;
+    }
+  }
+  wss.broadcast(line);
+  console.info("[MC]", line);
+};
 
 var startServer = function() {
   var app = express();
@@ -66,30 +99,35 @@ var startServer = function() {
 
   // Pass a command through to the underlying minecraft server
   router.post('/cmd', function(req, res) {
-    mcPut(req.body);
-    res.end('ok');  
+    if(mcServerState !== mcServerStates['READY']) {
+      res.end('fail');
+    } else {
+      mcPut(req.body);
+      res.end('ok'); 
+    } 
   });
 
   router.get('/status', function(req,res) { 
     usage.lookup(mcServer.pid, function(err, result) {
       res.json({
+        state:mcServerState,
         pid:mcServer.pid,
         cpu:result.cpu,      // in percentage
         memory:result.memory // in bytes
       }); 
     });
   });
-};
 
-var onClose = function() {
-  mcServer.removeListener('exit', restartMcServer);
-  httpServer.close();
-  // if minecraft takes longer than 5 seconds to stop, kill it
-  killTimeout = setTimeout(killMc, 5000);
-  mcServer.once('exit', function() {
-    clearTimeout(killTimeout);
+  router.get('/start',function(req, res) {
+    startMcServer();
+    res.end('ok');
   });
-  mcPut("stop");
+
+  router.get('/stop', function(req,res) {
+    mcServerState = mcServerStates['SHUTDOWN'];
+    killMc();
+    res.end('ok');
+  });
 };
 
 var startReadingInput = function() {
@@ -98,7 +136,9 @@ var startReadingInput = function() {
     output: process.stdout,
   });
   rl.on('line', function(line) {
-    if (line) mcPut(line);
+    if (line) {
+      mcPut(line);
+    }
     rl.prompt();
   });
   
@@ -108,11 +148,7 @@ var startReadingInput = function() {
   process.once('SIGINT', onClose);
 };
 
-var restartMcServer = function() {
-  onliners = {};
-  clearTimeout(killTimeout);
-  startMcServer();
-};
+
 
 var checkEula = function() {
   if(!fs.existsSync('eula.txt') || !fs.readFileSync('eula.txt').toString().match(/eula=true/)) {
@@ -131,6 +167,18 @@ var onMCData = function(data) {
   MCbuffer = lines[lines.length - 1];
 };
 
+var onClose = function() {
+  mcServer.removeListener('exit', restartMcServer);
+  httpServer.close();
+  // if minecraft takes longer than 5 seconds to stop, kill it
+  killTimeout = setTimeout(killMc, 5000);
+  mcServer.once('exit', function() {
+    clearTimeout(killTimeout);
+  });
+  mcPut("stop");
+
+  mcServerState = mcServerStates['SHUTDOWN'];
+};
 
 var startMcServer = function() {
   // TODO check java
@@ -140,47 +188,22 @@ var startMcServer = function() {
   });
 
   console.log("started mcServer with pid: "+mcServer.pid);
-
+  
   mcServer.stdin.setEncoding('utf8');
   mcServer.stdout.setEncoding('utf8');
   mcServer.stdout.on('data', onMCData);
   mcServer.stderr.setEncoding('utf8');
   mcServer.stderr.on('data', onMCData);
   mcServer.on('exit', restartMcServer);
+
+  mcServerState = mcServerStates['STARTING'];
 };
 
-var serverEmpty = function() {
-  for (var onliner in onliners) {
-    return false;
-  }
-  return true;
+var restartMcServer = function() {
+  if(mcServerState !== mcServerStates['SHUTDOWN'])
+  clearTimeout(killTimeout);
+  startMcServer();
 };
-
-var mcPut = function(cmd) {
-  mcServer.stdin.write(cmd + "\n");
-};
-
-
-var killMc = function() {
-  mcServer.kill();
-};
-
-var onMcLine = function(line) {
-  var handler, match;
-  for (var i = 0; i < lineHandlers.length; ++i) {
-    handler = lineHandlers[i];
-    match = line.match(handler.re);
-    if (match) {
-      match.shift();
-      handler.fn.apply(undefined,match);
-      handler.hit++;
-      return;
-    }
-  }
-  wss.broadcast(line);
-  console.info("[MC]", line);
-};
-
 
 var main = function() {
   startServer();

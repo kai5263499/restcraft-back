@@ -1,10 +1,10 @@
 {
   "name": "minecraft-rest",
   "version": "0.6.0",
-  "description": "serve minecraft with a simple REST interface",
-  "repository": {
-    "type": "git",
-    "url": "git://github.com/kai5263499/mcserve.git"
+  "private": true,
+  "description": "Console wrapper for a Minecraft server",
+  "scripts": {
+    "start": "node server.js"
   },
   "keywords": [
     "minecraft",
@@ -14,18 +14,18 @@
   "author": "Wes Widner <wes@werxltd.com>",
   "license": "BSD",
   "devDependencies": {
-    "dockerode":"2.0.3",
     "grunt": "^0.4.5",
+    "grunt-contrib-clean": "~0.4.0",
+    "grunt-contrib-compress": "^0.11.0",
     "grunt-contrib-jshint": "^0.10.0",
     "grunt-contrib-nodeunit": "~0.4.1",
-    "grunt-contrib-uglify": "~0.5.0",
     "grunt-contrib-watch": "^0.6.1",
-    "grunt-docker": "0.0.8",
-    "grunt-mocha": "^0.4.11"
+    "grunt-server-mocha": "^0.1.1"
   },
   "dependencies": {
     "superagent": "~0.14.1",
     "minecraft-protocol": "~0.9.0",
+    "express":"4.8.8",
     "express-generator": "4.8.0",
     "ws": "0.4.32",
     "lodash": "2.4.1",
