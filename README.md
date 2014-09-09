@@ -1,6 +1,6 @@
 # restcraft-backend
 
-Console wrapper for a Minecraft server
+Console wrapper for a Minecraft server which provides a REST interface to start/stop and issue commands to the underlying minecraft server. Also provides a live stream of log entries via websocket.
 
 ## Features
 

@@ -16,7 +16,6 @@ var usage = require('usage');
 var WebSocketServer = require('ws').Server;
 var fs = require('fs');
 
-
 if(!fs.existsSync(settings.server_directory)) {
   console.log("server directory "+settings.server_directory+" doesn't exist, attempting to create it");
   fs.mkdirSync(settings.server_directory);
@@ -27,6 +26,9 @@ if(!fs.existsSync(settings.server_jar)) {
   console.log(+' doesn\'t exist, downloading the latest minecraft server jar');
   process.exit(-1);
 }
+
+// To make JSHint happy
+var onClose, startMcServer, restartMcServer;
 
 var mcServer, httpServer, killTimeout, mp, wss, mcServerStats;
 
@@ -200,8 +202,9 @@ var startMcServer = function() {
 };
 
 var restartMcServer = function() {
-  if(mcServerState !== mcServerStates['SHUTDOWN'])
-  clearTimeout(killTimeout);
+  if(mcServerState !== mcServerStates['SHUTDOWN']) {
+    clearTimeout(killTimeout);
+  }
   startMcServer();
 };
 
