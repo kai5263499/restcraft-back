@@ -10,7 +10,7 @@ add    ./mcserve.docker.json /mcserve.json
 # Add start
 add    ./start.sh /start.sh
 
-run    apt-get --yes --force-yes install curl tzdata-java openjdk-7-jre-headless
+run    apt-get --yes --force-yes update && apt-get --yes --force-yes install curl tzdata-java openjdk-7-jre-headless
 run    npm install /
 run	   chmod +x /start.sh
 
