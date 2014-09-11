@@ -88,7 +88,7 @@ var onMcLine = function(line) {
 
 var getStatus = function(cb) {
   usage.lookup(mcServer.pid, function(err, result) {
-    if(err == null && result != undefined) {
+    if(err == null && result !== undefined) {
       cb({
         state:mcServerState,
         pid:mcServer.pid,
@@ -101,7 +101,7 @@ var getStatus = function(cb) {
       });
     }
   });
-}
+};
 
 var startServer = function() {
   var app = express();
@@ -125,18 +125,18 @@ var startServer = function() {
       ws.on('message', function(message) {
           var regularcommand = true;
 
-          if(message == 'status') {
+          if(message === 'status') {
             regularcommand = false;
             getStatus(function(status) {
               wss.broadcast(JSON.stringify(status));
             });
-          } else if(message == 'stop') {
+          } else if(message === 'stop') {
             regularcommand = false;
             shutdownMc();
-          } else if(message == 'start') {
+          } else if(message === 'start') {
             regularcommand = false;
             startMcServer();
-          } else if(message.substring(0,1) != '/') {
+          } else if(message.substring(0,1) !== '/') {
             message = '/'+message;
           }
 
