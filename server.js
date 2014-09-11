@@ -56,7 +56,18 @@ var mcPut = function(cmd) {
 
 var killMc = function() {
   mcServer.kill();
+};
+
+var shutdownMc = function() {
+  mcServer.removeListener('exit', restartMcServer);
   mcServerState = mcServerStates['SHUTDOWN'];
+
+  mcServer.once('exit', function() {
+    clearTimeout(killTimeout);
+  });
+  mcPut("stop");
+
+  killMc();
 };
 
 var onMcLine = function(line) {
@@ -75,6 +86,23 @@ var onMcLine = function(line) {
   console.info("[MC]", line);
 };
 
+var getStatus = function(cb) {
+  usage.lookup(mcServer.pid, function(err, result) {
+    if(err == null && result != undefined) {
+      cb({
+        state:mcServerState,
+        pid:mcServer.pid,
+        cpu:result.cpu,      // in percentage
+        memory:result.memory // in bytes
+      });
+    } else {
+      cb({
+        error:true
+      });
+    }
+  });
+}
+
 var startServer = function() {
   var app = express();
   app.use(bodyParser.text());
@@ -87,16 +115,35 @@ var startServer = function() {
   wss = new WebSocketServer({path:'/ws',server: httpServer});
   
   wss.broadcast = function(data) {
-    for(var i in this.clients) {
+    if(!this.clients) {return;}
+    for(var i=this.clients.length;i--;) {
       this.clients[i].send(data);
     }
   };
 
   wss.on('connection', function(ws) {
       ws.on('message', function(message) {
-          console.log('received: %s', message);
+          var regularcommand = true;
+
+          if(message == 'status') {
+            regularcommand = false;
+            getStatus(function(status) {
+              wss.broadcast(JSON.stringify(status));
+            });
+          } else if(message == 'stop') {
+            regularcommand = false;
+            shutdownMc();
+          } else if(message == 'start') {
+            regularcommand = false;
+            startMcServer();
+          } else if(message.substring(0,1) != '/') {
+            message = '/'+message;
+          }
+
+          if(regularcommand) {
+            mcPut(message);
+          }
       });
-      ws.send('something');
   });
 
   // Pass a command through to the underlying minecraft server
@@ -110,13 +157,8 @@ var startServer = function() {
   });
 
   router.get('/status', function(req,res) { 
-    usage.lookup(mcServer.pid, function(err, result) {
-      res.json({
-        state:mcServerState,
-        pid:mcServer.pid,
-        cpu:result.cpu,      // in percentage
-        memory:result.memory // in bytes
-      }); 
+    getStatus(function(status) {
+      res.json(status);
     });
   });
 
@@ -126,8 +168,7 @@ var startServer = function() {
   });
 
   router.get('/stop', function(req,res) {
-    mcServerState = mcServerStates['SHUTDOWN'];
-    killMc();
+    shutdownMc();
     res.end('ok');
   });
 };
@@ -204,8 +245,8 @@ var startMcServer = function() {
 var restartMcServer = function() {
   if(mcServerState !== mcServerStates['SHUTDOWN']) {
     clearTimeout(killTimeout);
+    startMcServer();
   }
-  startMcServer();
 };
 
 var main = function() {

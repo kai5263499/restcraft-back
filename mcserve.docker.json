@@ -1,7 +1,7 @@
 {
   "server_directory":"/data",
   "server_jar":"minecraft_server.jar",
-  "memory":1024,
+  "memory":2048,
   "webPort": 9999,
   "webHost": "0.0.0.0"
 }
