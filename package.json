@@ -28,7 +28,7 @@
     "express":"4.8.8",
     "express-generator": "4.8.0",
     "ws": "0.4.32",
-    "lodash": "2.4.1",
+    "lodash": "4.17.12",
     "commander": "2.3.0",
     "body-parser": "1.8.0",
     "usage": "0.4.13"
